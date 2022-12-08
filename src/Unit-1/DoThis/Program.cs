@@ -24,7 +24,7 @@ namespace WinTail
 
             // pass tailCoordinatorActor to fileValidatorActorProps (just adding one extra arg)
             Props fileValidatorActorProps = Props.Create(() =>
-            new FileValidationActor(consoleWriterActor, tailCoordinatorActor));
+            new FileValidationActor(consoleWriterActor));
             IActorRef validationActor = MyActorSystem.ActorOf(fileValidatorActorProps,
                 "validationActor");
 
@@ -33,7 +33,7 @@ namespace WinTail
             //Props validationProps = Props.Create<ValidationActor>(consoleWriterActor);
             //IActorRef validationActor = MyActorSystem.ActorOf(validationProps, "Validation");
 
-            Props consoleReaderProps = Props.Create(()=> new ConsoleReaderActor(validationActor));
+            Props consoleReaderProps = Props.Create(()=> new ConsoleReaderActor());
             IActorRef consoleReaderActor = MyActorSystem.ActorOf(consoleReaderProps, "ConsoleReader");
 
             

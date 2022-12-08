@@ -11,12 +11,6 @@ namespace WinTail
     {
         public const string ExitCommand = "exit";
         public const string StartCommand = "start";
-        private IActorRef _validationActor;
-
-        public ConsoleReaderActor(IActorRef validationActor)
-        {
-            _validationActor = validationActor;
-        }
 
         protected override void OnReceive(object message)
         {
@@ -49,7 +43,7 @@ namespace WinTail
             }
 
             //if the system does not need to shutdown tell the message to the validation actor
-            _validationActor.Tell(message);
+            Context.ActorSelection("akka://MyActorSystem/user/validationActor").Tell(message);
         }
 
         #endregion
