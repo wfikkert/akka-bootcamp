@@ -7,7 +7,7 @@ using System.Windows.Forms;
 
 namespace ChartApp.Actors
 {
-    public class ChartingActor : ReceiveActor
+    public class ChartingActor : ReceiveActor, IWithUnboundedStash
     {
         private const int MaxPoints = 250;
         private int xPosCounter = 0;
@@ -62,6 +62,8 @@ namespace ChartApp.Actors
         private Dictionary<string, Series> _seriesIndex;
         private readonly Button _pauseButton;
 
+        public IStash Stash { get; set; }
+
         public ChartingActor(Chart chart, Button pauseButton) : this(chart, new Dictionary<string, Series>(), pauseButton)
         {
         }
@@ -90,12 +92,25 @@ namespace ChartApp.Actors
 
         private void Paused()
         {
+            //stash messages AddSeries and RemoveSeries while paused
+            Receive<AddSeries>(addseries =>
+            {
+                Stash.Stash();
+            });
+            Receive<RemoveSeries>(removeSeries =>
+            {
+                Stash.Stash();
+            });
             Receive<Metric>(metric => HandleMetricsPaused(metric));
             Receive<TogglePause>(pause =>
             {
                 SetPauseButtonText(false);
                 UnbecomeStacked();
+
+                //Unstash the messages when leaving the paused state
+                Stash.UnstashAll();
             });
+            
         }
 
 
