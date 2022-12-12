@@ -8,7 +8,7 @@ namespace GithubActors.Actors
     /// <summary>
     /// Top-level actor responsible for coordinating and launching repo-processing jobs
     /// </summary>
-    public class GithubCommanderActor : ReceiveActor
+    public class GithubCommanderActor : ReceiveActor, IWithUnboundedStash
     {
         #region Message classes
 
@@ -46,35 +46,25 @@ namespace GithubActors.Actors
 
         private IActorRef _coordinator;
         private IActorRef _canAcceptJobSender;
+        private int _pendingJobReplies;
+
+        public IStash Stash { get; set; }
 
         public GithubCommanderActor()
         {
-            Receive<CanAcceptJob>(job =>
-            {
-                _canAcceptJobSender = Sender;
-                _coordinator.Tell(job);
-            });
-
-            Receive<UnableToAcceptJob>(job =>
-            {
-                _canAcceptJobSender.Tell(job);
-            });
-
-            Receive<AbleToAcceptJob>(job =>
-            {
-                _canAcceptJobSender.Tell(job);
-
-                //start processing messages
-                _coordinator.Tell(new GithubCoordinatorActor.BeginJob(job.Repo));
-
-                //launch the new window to view results of the processing
-                Context.ActorSelection(ActorPaths.MainFormActor.Path).Tell(new MainFormActor.LaunchRepoResultsWindow(job.Repo, Sender));
-            });
+            Ready();
         }
 
         protected override void PreStart()
         {
-            _coordinator = Context.ActorOf(Props.Create(() => new GithubCoordinatorActor()), ActorPaths.GithubCoordinatorActor.Name);
+            //Create 3 GithubCoordinator Actors
+            var c1 = Context.ActorOf(Props.Create(() => new GithubCoordinatorActor()), ActorPaths.GithubCoordinatorActor.Name + "1");
+            var c2 = Context.ActorOf(Props.Create(() => new GithubCoordinatorActor()), ActorPaths.GithubCoordinatorActor.Name + "2");
+            var c3 = Context.ActorOf(Props.Create(() => new GithubCoordinatorActor()), ActorPaths.GithubCoordinatorActor.Name + "3");
+
+            //Create a broadcast router who will ask all of the corodinator actors if they are available
+            _coordinator = Context.ActorOf(Props.Empty.WithRouter(new BroadcastGroup(ActorPaths.GithubCoordinatorActor.Path + "1", ActorPaths.GithubCoordinatorActor.Path + "2", ActorPaths.GithubCoordinatorActor.Path + "3")));
+
             base.PreStart();
         }
 
@@ -83,6 +73,60 @@ namespace GithubActors.Actors
             //kill off the old coordinator so we can recreate it from scratch
             _coordinator.Tell(PoisonPill.Instance);
             base.PreRestart(reason, message);
+        }
+
+        private void Ready()
+        {
+            Receive<CanAcceptJob>(job =>
+            {
+                _coordinator.Tell(job);
+
+                BecomeAsking();
+            });
+        }
+
+        private void BecomeAsking()
+        {
+            _canAcceptJobSender = Sender;
+            _pendingJobReplies = 3;
+            Become(Asking);
+        }
+
+        private void Asking()
+        {
+            Receive<CanAcceptJob>(job =>
+            {
+                Stash.Stash();
+            });
+
+            Receive<UnableToAcceptJob>(job =>
+            {
+                _pendingJobReplies--;
+                if (_pendingJobReplies == 0)
+                {
+                    _canAcceptJobSender.Tell(job);
+                    BecomeReady();
+                }
+            });
+
+            Receive<AbleToAcceptJob>(job =>
+            {
+                _canAcceptJobSender.Tell(job);
+
+                //start processing messages
+                Sender.Tell(new GithubCoordinatorActor.BeginJob(job.Repo));
+
+                //launch the new window to view results of the processing
+                Context.ActorSelection(ActorPaths.MainFormActor.Path).Tell(new MainFormActor.LaunchRepoResultsWindow(job.Repo, Sender));
+
+                BecomeReady();
+            });
+        }
+
+        private void BecomeReady()
+        {
+            Become(Ready);
+            Stash.UnstashAll();
         }
     }
 }
