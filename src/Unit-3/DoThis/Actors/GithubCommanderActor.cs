@@ -57,13 +57,8 @@ namespace GithubActors.Actors
 
         protected override void PreStart()
         {
-            //Create 3 GithubCoordinator Actors
-            var c1 = Context.ActorOf(Props.Create(() => new GithubCoordinatorActor()), ActorPaths.GithubCoordinatorActor.Name + "1");
-            var c2 = Context.ActorOf(Props.Create(() => new GithubCoordinatorActor()), ActorPaths.GithubCoordinatorActor.Name + "2");
-            var c3 = Context.ActorOf(Props.Create(() => new GithubCoordinatorActor()), ActorPaths.GithubCoordinatorActor.Name + "3");
-
-            //Create a broadcast router who will ask all of the corodinator actors if they are available
-            _coordinator = Context.ActorOf(Props.Empty.WithRouter(new BroadcastGroup(ActorPaths.GithubCoordinatorActor.Path + "1", ActorPaths.GithubCoordinatorActor.Path + "2", ActorPaths.GithubCoordinatorActor.Path + "3")));
+            //create a broadcast router
+            _coordinator = Context.ActorOf(Props.Create(() => new GithubCoordinatorActor()).WithRouter(FromConfig.Instance), ActorPaths.GithubCoordinatorActor.Name);
 
             base.PreStart();
         }
@@ -88,7 +83,7 @@ namespace GithubActors.Actors
         private void BecomeAsking()
         {
             _canAcceptJobSender = Sender;
-            _pendingJobReplies = 3;
+            _pendingJobReplies = _coordinator.Ask<Routees>(new GetRoutees()).Result.Members.Count();
             Become(Asking);
         }
 
